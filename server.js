@@ -4,7 +4,7 @@ const dotenv = require('dotenv');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcryptjs');
 const mongoose = require('mongoose');
-const { OpenAI } = require('openai');
+const Groq = require('groq-sdk');
 
 dotenv.config();
 
@@ -12,7 +12,11 @@ const app = express();
 
 // ============ MIDDLEWARE ============
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: [
+    'http://localhost:3000',
+    'https://ai-writing-tool-frontend.vercel.app',
+    process.env.CORS_ORIGIN
+  ].filter(Boolean),
   methods: ['GET', 'POST', 'PUT', 'DELETE'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
@@ -46,9 +50,7 @@ const savedContentSchema = new mongoose.Schema({
 const User = mongoose.model('User', userSchema);
 const SavedContent = mongoose.model('SavedContent', savedContentSchema);
 
-// ============ OPENAI SETUP ============
-const Groq = require('groq-sdk');
-
+// ============ GROQ SETUP ============
 const openai = new Groq({
   apiKey: process.env.GROQ_API_KEY
 });
@@ -57,7 +59,7 @@ const openai = new Groq({
 const prompts = {
   linkedin: `Create a professional LinkedIn post on the topic: "{topic}". 
     The post should be engaging, include relevant emojis, and be optimized for LinkedIn engagement. 
-    Keep it concise but impactful (150-250 characters). Include a call-to-action at the end.`,
+    Keep it concise but impactful (150-250 words). Include a call-to-action at the end.`,
 
   email: `Write a professional cold email on: "{topic}". 
     The email should be personable, have a clear subject line, and include a compelling reason to respond. 
@@ -104,6 +106,14 @@ app.post('/api/auth/signup', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    }
+
     const existingUser = await User.findOne({ email });
     if (existingUser) {
       return res.status(400).json({ error: 'User already exists' });
@@ -136,6 +146,10 @@ app.post('/api/auth/login', async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    if (!email || !password) {
+      return res.status(400).json({ error: 'Email and password are required' });
+    }
+
     const user = await User.findOne({ email });
     if (!user) {
       return res.status(401).json({ error: 'Invalid credentials' });
@@ -164,13 +178,17 @@ app.post('/api/generate', verifyToken, async (req, res) => {
   try {
     const { contentType, topic } = req.body;
 
+    if (!topic || !contentType) {
+      return res.status(400).json({ error: 'Topic and content type are required' });
+    }
+
     const user = await User.findById(req.userId);
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
 
     if (user.credits <= 0) {
-      return res.status(400).json({ error: 'Insufficient credits' });
+      return res.status(400).json({ error: 'Insufficient credits. Please upgrade to Pro.' });
     }
 
     const prompt = prompts[contentType];
@@ -181,7 +199,8 @@ app.post('/api/generate', verifyToken, async (req, res) => {
     const formattedPrompt = prompt.replace('{topic}', topic);
 
     const response = await openai.chat.completions.create({
-      model: 'llama-3.3-70b-versatile', messages: [
+      model: 'llama-3.3-70b-versatile',
+      messages: [
         {
           role: 'system',
           content: 'You are a professional content writer. Create high-quality, engaging content. Be creative and impactful.'
@@ -206,7 +225,7 @@ app.post('/api/generate', verifyToken, async (req, res) => {
     });
   } catch (error) {
     console.error('Generation error:', error);
-    res.status(500).json({ error: 'Failed to generate content' });
+    res.status(500).json({ error: 'Failed to generate content. Please try again.' });
   }
 });
 
