@@ -12,12 +12,23 @@ const app = express();
 
 // ============ MIDDLEWARE ============
 app.use(cors({
-  origin: [
-    'http://localhost:3000',
-    'https://ai-writing-tool-frontend.vercel.app',
-    process.env.CORS_ORIGIN
-  ].filter(Boolean),
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
+  origin: function (origin, callback) {
+    // Allow requests with no origin (mobile apps, curl, Postman)
+    if (!origin) return callback(null, true);
+
+    // Allow localhost
+    if (origin === 'http://localhost:3000') return callback(null, true);
+
+    // Allow ALL vercel.app subdomains
+    if (origin.endsWith('.vercel.app')) return callback(null, true);
+
+    // Allow custom domain from env
+    if (process.env.CORS_ORIGIN && origin === process.env.CORS_ORIGIN) return callback(null, true);
+
+    // Block everything else
+    return callback(new Error('Not allowed by CORS'));
+  },
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
