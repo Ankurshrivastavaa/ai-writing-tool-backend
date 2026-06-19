@@ -12,28 +12,25 @@ const app = express();
 
 // ============ MIDDLEWARE ============
 app.use(cors({
-  origin: function (origin, callback) {
-    // Allow requests with no origin (mobile apps, curl, Postman)
-    if (!origin) return callback(null, true);
-
-    // Allow localhost
-    if (origin === 'http://localhost:3000') return callback(null, true);
-
-    // Allow ALL vercel.app subdomains
-    if (origin.endsWith('.vercel.app')) return callback(null, true);
-
-    // Allow custom domain from env
-    if (process.env.CORS_ORIGIN && origin === process.env.CORS_ORIGIN) return callback(null, true);
-
-    // Block everything else
-    return callback(new Error('Not allowed by CORS'));
-  },
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  origin: ['http://localhost:3000', 'https://ai-writing-tool-frontend.vercel.app'],
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
+app.options('*', cors());
+
 app.use(express.json());
+
+// Manual CORS safety net
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', req.headers.origin || '*');
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Methods', 'GET,POST,PUT,DELETE,OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (req.method === 'OPTIONS') return res.sendStatus(200);
+  next();
+});
 
 // ============ MONGODB CONNECTION ============
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/ai-writer')
